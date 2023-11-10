@@ -1,4 +1,4 @@
-from base import FuseBase
+from .base import FuseBase
 import time
 
 class FuseBup(FuseBase):

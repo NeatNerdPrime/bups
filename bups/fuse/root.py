@@ -1,10 +1,10 @@
 import os
-from base import FuseBase
+from .base import FuseBase
 
 #from ..sudo import sudo
 try:
 	from bups.sudo import sudo
-except ImportError, e:
+except ImportError as e:
 	from sudo import sudo
 
 class FuseRoot(FuseBase):

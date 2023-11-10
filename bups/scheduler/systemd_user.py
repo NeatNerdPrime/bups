@@ -1,4 +1,4 @@
-import ConfigParser
+import configparser
 import io
 import os
 
@@ -16,7 +16,7 @@ def get_service_path(job_id):
     return os.path.join(config_dir, job_id + ".service")
 
 def new_config():
-    config = ConfigParser.RawConfigParser()
+    config = configparser.RawConfigParser()
     config.optionxform = str
     return config
 

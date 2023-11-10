@@ -1,6 +1,6 @@
 import os
 import io
-import ConfigParser
+import configparser
 import subprocess
 import tempfile
 from ..sudo import SudoQueue
@@ -15,7 +15,7 @@ def parse_period(time_str):
 	return time_str.split('/')[1]
 
 def new_config():
-	config = ConfigParser.RawConfigParser()
+	config = configparser.RawConfigParser()
 	config.optionxform = str
 	return config
 
@@ -31,7 +31,7 @@ def parse_config(timer_cfg):
 def get_job(job_id):
 	try:
 		f = open(config_dir+"/"+job_id+".timer", "r")
-	except OSError, e:
+	except OSError as e:
 		return None
 
 	cfg_str = f.read()

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -30,4 +30,4 @@ f.close()
 st = os.stat(dest_path)
 os.chmod(dest_path, st.st_mode | stat.S_IXUSR)
 
-print("Launcher successfully installed at "+dest_path)
+print(("Launcher successfully installed at "+dest_path))

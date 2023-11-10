@@ -1,7 +1,7 @@
 import os
 import subprocess
 import json
-import config
+from . import config
 
 def command_exists(cmd):
 	devnull = open(os.devnull, 'wb')
@@ -57,15 +57,15 @@ class Worker:
 			# Process has not started/has terminated
 			self.start()
 
-		print('Send command', cmd)
+		print(('Send command', cmd))
 		self.proc.stdin.write(cmd+"\n")
 		self.proc.stdin.flush()
 		json_res = self.proc.stdout.readline().strip()
-		print('Got response', json_res)
+		print(('Got response', json_res))
 
 		try:
 			res = json.loads(json_res)
-		except ValueError, e:
+		except ValueError as e:
 			res = {
 				"success": False,
 				"output": json_res

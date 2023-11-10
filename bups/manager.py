@@ -4,13 +4,13 @@ import subprocess
 import tempfile
 import re
 
-from worker import BupWorker
+from .worker import BupWorker
 #from sudo import sudo
-from fuse.root import FuseRoot
-from fuse.bup import FuseBup
-from fuse.sshfs import FuseSshfs
-from fuse.google_drive import FuseGoogleDrive
-from fuse.encfs import FuseEncfs
+from .fuse.root import FuseRoot
+from .fuse.bup import FuseBup
+from .fuse.sshfs import FuseSshfs
+from .fuse.google_drive import FuseGoogleDrive
+from .fuse.encfs import FuseEncfs
 
 def noop(*args):
 	pass
@@ -105,7 +105,7 @@ class BupManager:
 
 				return callbacks["onstatus"](line, ctx)
 
-			callbacks["onstatus"]("Backing up "+backupName+": indexing files...", ctx)
+			callbacks["onstatus"]("Backing up "+backupName.decode()+": indexing files...", ctx)
 
 			self.bup.index(dirpath, {
 				"exclude_paths": excludePaths,
@@ -116,7 +116,7 @@ class BupManager:
 				"onstatus": onstatus
 			})
 
-			callbacks["onstatus"]("Backing up "+backupName+": saving files...", ctx)
+			callbacks["onstatus"]("Backing up "+backupName.decode()+": saving files...", ctx)
 
 			self.bup.save(dirpath, {
 				"name": backupName,
@@ -164,7 +164,7 @@ class BupManager:
 		from_path = opts.get("from").encode("ascii")
 		to_path = opts.get("to").encode("ascii")
 
-		callbacks["onstatus"]("Restoring "+from_path+" to "+to_path+"...")
+		callbacks["onstatus"]("Restoring "+from_path.decode()+" to "+to_path.decode()+"...")
 
 		self.bup.restore(from_path, to_path, callbacks)
 
@@ -201,7 +201,7 @@ class BupManager:
 		mount_path = tempfile.mkdtemp(prefix="bups-bup-")
 		try:
 			mounter.mount(mount_path)
-		except Exception, e:
+		except Exception as e:
 			callbacks["onerror"]("WARN: "+str(e)+"\n")
 
 		self.bup_mounter = mounter
@@ -226,7 +226,7 @@ class BupManager:
 		callbacks["onstatus"]("Unmounting bup filesystem...")
 		try:
 			self.bup_mounter.unmount()
-		except Exception, e:
+		except Exception as e:
 			callbacks["onerror"]("WARN: "+str(e)+"\n")
 
 		callbacks["onstatus"]("Unmounting filesystem...")
@@ -270,7 +270,7 @@ class BupManager:
 
 			try:
 				mounter.mount(mount_path, last_mount_path)
-			except Exception, e:
+			except Exception as e:
 				callbacks["onerror"]("ERR: "+str(e)+"\n", {})
 				return False
 			last_mount_path = mounter.get_inner_path()
@@ -292,7 +292,7 @@ class BupManager:
 
 			try:
 				mounter.unmount()
-			except Exception, e:
+			except Exception as e:
 				callbacks["onerror"]("ERR: "+str(e)+"\n", {})
 				return False
 

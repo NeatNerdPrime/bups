@@ -2,12 +2,12 @@ import sys
 import os
 from subprocess import PIPE, Popen, call
 from gi.repository import Gtk, GObject, Pango, Gdk, Gio, GLib
-from manager import BupManager
-from sudo import Worker as SudoWorker
-from scheduler import schedulers
-from version import __version__
+from .manager import BupManager
+from .sudo import Worker as SudoWorker
+from .scheduler import schedulers
+from .version import __version__
 import threading
-import config
+from . import config
 import traceback
 import gettext
 import getpass
@@ -163,7 +163,7 @@ class BackupWindow(Gtk.Window):
 		def do_backup(manager, callbacks):
 			try:
 				return manager.backup(callbacks)
-			except Exception, e:
+			except Exception as e:
 				callbacks["onerror"](traceback.format_exc(), {})
 				callbacks["onabord"]({}, {})
 
@@ -182,7 +182,7 @@ class BackupWindow(Gtk.Window):
 		buf = self.textview.get_buffer()
 		buf.insert(buf.get_end_iter(), txt)
 		#buf.insert_at_cursor(txt)
-		print(txt.strip())
+		print((txt.strip()))
 
 	def on_close_clicked(self, btn):
 		self.destroy()
@@ -334,7 +334,7 @@ class RestoreWindow(Gtk.Window):
 					"from": from_path,
 					"to": to_path
 				}, callbacks)
-			except Exception, e:
+			except Exception as e:
 				callbacks["onerror"](traceback.format_exc())
 				callbacks["onabord"]()
 
@@ -495,7 +495,7 @@ class SettingsWindow(Gtk.Window):
 			s = schedulers[name]
 			try:
 				job = s.get_job("bups")
-			except IOError, e:
+			except IOError as e:
 				i += 1
 				continue
 			active_scheduler = i
@@ -551,7 +551,7 @@ class SettingsWindow(Gtk.Window):
 		if available_schedulers_nbr == 0:
 			self.schedule_switch.set_sensitive(False)
 			self.schedule_period_spin.set_sensitive(False)
-			label = Gtk.Label(_("No scheduler available. Please install one of:")+" " + ", ".join(schedulers.keys())+".")
+			label = Gtk.Label(_("No scheduler available. Please install one of:")+" " + ", ".join(list(schedulers.keys()))+".")
 			vbox.add(label)
 
 		# Buttons
@@ -977,7 +977,7 @@ class BupWindow(Gtk.ApplicationWindow):
 		response = dialog.run()
 		if response == Gtk.ResponseType.OK:
 			dirpath = dialog.get_filename()
-			print("Dir selected: " + dirpath)
+			print(("Dir selected: " + dirpath))
 
 			self.add_dir(dirpath)
 		elif response == Gtk.ResponseType.CANCEL:
@@ -990,7 +990,7 @@ class BupWindow(Gtk.ApplicationWindow):
 		model, treeiter = selection.get_selected()
 		if treeiter != None:
 			dirpath = model[treeiter][0]
-			print("Removing dir "+dirpath)
+			print(("Removing dir "+dirpath))
 
 			model.remove(treeiter)
 			i = 0
@@ -1009,7 +1009,7 @@ class BupWindow(Gtk.ApplicationWindow):
 		return login+"-"+dirname
 
 	def normalize_dir(self, dir_data):
-		if type(dir_data) == str or type(dir_data) == unicode:
+		if type(dir_data) == str or type(dir_data) == str:
 			dir_data = {
 				"path": dir_data,
 				"name": self.get_default_backup_name(dir_data)
@@ -1047,11 +1047,11 @@ class BupWindow(Gtk.ApplicationWindow):
 		dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO, 0, _("Mounting filesystem..."))
 
 		def open_mounted(data):
-			print("Open dir:", data["path"])
+			print(("Open dir:", data["path"]))
 			call("xdg-open "+data["path"], shell=True)
 
 		def show_error(e):
-			print("ERR: could not mount bup filesystem: "+str(e))
+			print(("ERR: could not mount bup filesystem: "+str(e)))
 			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
 				Gtk.ButtonsType.OK, _("Could not mount filesystem"))
 			dialog.format_secondary_text(str(e))
@@ -1081,7 +1081,7 @@ class BupWindow(Gtk.ApplicationWindow):
 		def do_mount(manager, callbacks):
 			try:
 				manager.mount(callbacks)
-			except Exception, e:
+			except Exception as e:
 				callbacks["onabord"]()
 				callbacks["onerror"](traceback.format_exc())
 
@@ -1107,17 +1107,17 @@ class BupWindow(Gtk.ApplicationWindow):
 				current_scheduler_name = name
 				current_cfg = schedulers[name].get_job("bups")
 				break
-			except IOError, e:
+			except IOError as e:
 				current_cfg = None
 
 		current_scheduler = schedulers[current_scheduler_name]
 		new_scheduler = schedulers[new_scheduler_name]
 
 		def remove_job():
-			print("Removing scheduler job "+current_cfg["id"])
+			print(("Removing scheduler job "+current_cfg["id"]))
 			current_scheduler.remove_job(current_cfg["id"])
 		def update_job():
-			print("Updating scheduler job "+new_cfg["id"])
+			print(("Updating scheduler job "+new_cfg["id"]))
 			new_scheduler.update_job(new_cfg)
 		def remove_update_job():
 			if current_cfg is not None:
@@ -1125,7 +1125,7 @@ class BupWindow(Gtk.ApplicationWindow):
 			update_job()
 
 		def show_error(e):
-			print("ERR: could not update scheduler config: "+str(e))
+			print(("ERR: could not update scheduler config: "+str(e)))
 			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
 				Gtk.ButtonsType.OK, _("Could not update scheduler config"))
 			dialog.format_secondary_text(str(e))
@@ -1149,7 +1149,7 @@ class BupWindow(Gtk.ApplicationWindow):
 			def run_task(task, onexit):
 				try:
 					task()
-				except Exception, e:
+				except Exception as e:
 					GLib.idle_add(show_error, e)
 				onexit()
 
@@ -1191,8 +1191,8 @@ class BupWindow(Gtk.ApplicationWindow):
 
 		try:
 			config.write(self.config)
-		except IOError, e:
-			print("ERR: could not update config: "+str(e))
+		except IOError as e:
+			print(("ERR: could not update config: "+str(e)))
 			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
 				Gtk.ButtonsType.OK, _("Could not update config"))
 			dialog.format_secondary_text(str(e))
