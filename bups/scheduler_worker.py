@@ -1,8 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys
-import config
-from manager import BupManager
+from . import config
+from .manager import BupManager
 
 manager = BupManager(config.read(sys.argv[1]))
 

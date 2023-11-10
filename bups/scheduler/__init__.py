@@ -1,6 +1,6 @@
-import anacron
-import systemd
-import systemd_user
+from . import anacron
+from . import systemd
+from . import systemd_user
 
 schedulers = {
     "anacron": anacron,

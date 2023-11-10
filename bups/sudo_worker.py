@@ -1,16 +1,16 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import sys
-import config
+from . import config
 import json
-from manager import BupManager
+from .manager import BupManager
 
 manager = BupManager(config.read(sys.argv[1]))
 
 while True:
 	try:
-		cmd = raw_input()
-	except EOFError, e:
+		cmd = eval(input())
+	except EOFError as e:
 		cmd = 'quit'
 
 	res = {

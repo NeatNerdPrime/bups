@@ -1,3 +1,3 @@
-from gtk import BupApp
+from .gtk import BupApp
 
 app = BupApp()

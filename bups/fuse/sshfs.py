@@ -1,6 +1,6 @@
 import os
 import subprocess
-from base import FuseBase
+from .base import FuseBase
 
 class FuseSshfs(FuseBase):
 	def __init__(self, cfg):
