@@ -1,7 +1,7 @@
 import os
 import json
 
-sys_config_file = os.path.realpath(os.path.dirname(__file__)+"/config/config.json")
+sys_config_file = os.path.realpath(os.path.join(os.path.dirname(__file__), "config", "config.json"))
 user_config_file = os.path.expanduser("~/.config/bups/config.json")
 
 def file_path():
@@ -10,19 +10,12 @@ def file_path():
 	return sys_config_file
 
 def read(custom_config_file=None):
-	if custom_config_file is not None and os.path.isfile(custom_config_file):
-		f = open(custom_config_file, 'r')
-	else:
-		f = open(file_path(), 'r')
-	cfg = json.load(f)
-	f.close()
-	return cfg
+	config_path = custom_config_file if custom_config_file and os.path.isfile(custom_config_file) else file_path()
+	with open(config_path, 'r') as f:
+		return json.load(f)
 
 def write(cfg):
 	user_config_dir = os.path.dirname(user_config_file)
-	if not os.path.exists(user_config_dir):
-		os.makedirs(user_config_dir)
-	f = open(user_config_file, 'w')
-
-	json.dump(cfg, f, indent=4)
-	f.close()
+	os.makedirs(user_config_dir, exist_ok=True)
+	with open(user_config_file, 'w') as f:
+		json.dump(cfg, f, indent=4)

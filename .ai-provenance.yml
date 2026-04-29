@@ -1,0 +1,39 @@
+---
+# AI Provenance for bups
+# Tracks AI-assisted modifications to this repository
+
+project: bups
+description: Simple GUI for Bup, a very efficient backup system
+license: MIT
+upstream: https://github.com/emersion/bups
+
+sessions:
+  - id: S-BUPS-PHASE1
+    date: "2026-04-29"
+    model: Claude Opus 4.6 (1M context)
+    provider: Anthropic
+    scope: >
+      Python 2→3 bug fixes and GTK 3→4 migration.
+      Fixed remaining Python 2 idioms (eval(input), python2 hardcode,
+      encode/decode, mutable defaults, deprecated APIs).
+      Migrated entire GTK UI from GTK 3 to GTK 4 (new widget API,
+      container model, async file dialogs, ListView, DropDown, AlertDialog).
+      Added pyproject.toml with modern packaging.
+    files_modified:
+      - bups/__init__.py
+      - bups/gtk.py
+      - bups/config.py
+      - bups/manager.py
+      - bups/sudo.py
+      - bups/sudo_worker.py
+      - bups/version.py
+      - bups/worker.py
+      - bups/fuse/root.py
+      - bups/scheduler/anacron.py
+      - bups/scheduler/systemd.py
+      - bups/scheduler/systemd_user.py
+      - bin/bups
+      - .gitignore
+      - pyproject.toml
+      - .ai-provenance.yml
+    human_review: pending

@@ -40,19 +40,20 @@ class BupManager:
 		if mount_cfg.get("encrypt", False):
 			self.parents.append(FuseEncfs())
 
-	def backup(self, callbacks={}):
+	def backup(self, callbacks=None):
+		callbacks = callbacks or {}
 		callbacks_names = ["onstatus", "onerror", "onprogress", "onfinish", "onabord"]
 		for name in callbacks_names:
-			if not name in callbacks:
+			if name not in callbacks:
 				callbacks[name] = noop
 
 		ctx = {}
 
 		def backupDir(dir_data):
-			dirpath = dir_data["path"].encode("ascii")
-			backupName = dir_data["name"].encode("ascii")
-			excludePaths = [x.encode("ascii") for x in dir_data.get("exclude", [])]
-			excludeRxs = [x.encode("ascii") for x in dir_data.get("excluderx", [])]
+			dirpath = dir_data["path"]
+			backupName = dir_data["name"]
+			excludePaths = list(dir_data.get("exclude", []))
+			excludeRxs = list(dir_data.get("excluderx", []))
 
 			ctx = {
 				"path": dirpath,
@@ -105,7 +106,7 @@ class BupManager:
 
 				return callbacks["onstatus"](line, ctx)
 
-			callbacks["onstatus"]("Backing up "+backupName.decode()+": indexing files...", ctx)
+			callbacks["onstatus"]("Backing up " + backupName + ": indexing files...", ctx)
 
 			self.bup.index(dirpath, {
 				"exclude_paths": excludePaths,
@@ -116,7 +117,7 @@ class BupManager:
 				"onstatus": onstatus
 			})
 
-			callbacks["onstatus"]("Backing up "+backupName.decode()+": saving files...", ctx)
+			callbacks["onstatus"]("Backing up " + backupName + ": saving files...", ctx)
 
 			self.bup.save(dirpath, {
 				"name": backupName,
@@ -150,10 +151,11 @@ class BupManager:
 		callbacks["onstatus"]('Backup finished.', ctx)
 		callbacks["onfinish"]({}, ctx)
 
-	def restore(self, opts, callbacks={}):
+	def restore(self, opts, callbacks=None):
+		callbacks = callbacks or {}
 		callbacks_names = ["onstatus", "onerror", "onprogress", "onfinish", "onabord"]
 		for name in callbacks_names:
-			if not name in callbacks:
+			if name not in callbacks:
 				callbacks[name] = noop
 
 		callbacks["onstatus"]("Mounting filesystem...")
@@ -161,10 +163,10 @@ class BupManager:
 			callbacks["onabord"]()
 			return
 
-		from_path = opts.get("from").encode("ascii")
-		to_path = opts.get("to").encode("ascii")
+		from_path = opts.get("from")
+		to_path = opts.get("to")
 
-		callbacks["onstatus"]("Restoring "+from_path.decode()+" to "+to_path.decode()+"...")
+		callbacks["onstatus"]("Restoring " + from_path + " to " + to_path + "...")
 
 		self.bup.restore(from_path, to_path, callbacks)
 
@@ -176,14 +178,15 @@ class BupManager:
 		callbacks["onstatus"]("Restoration finished.")
 		callbacks["onfinish"]()
 
-	def mount(self, callbacks={}):
-		if not "onstatus" in callbacks:
+	def mount(self, callbacks=None):
+		callbacks = callbacks or {}
+		if "onstatus" not in callbacks:
 			callbacks["onstatus"] = noop
-		if not "onerror" in callbacks:
+		if "onerror" not in callbacks:
 			callbacks["onerror"] = noop
-		if not "onready" in callbacks:
+		if "onready" not in callbacks:
 			callbacks["onready"] = noop
-		if not "onabord" in callbacks:
+		if "onabord" not in callbacks:
 			callbacks["onabord"] = noop
 
 		cfg = self.config
@@ -212,12 +215,13 @@ class BupManager:
 			"path": mounter.get_inner_path()
 		})
 
-	def unmount(self, callbacks={}):
-		if not "onstatus" in callbacks:
+	def unmount(self, callbacks=None):
+		callbacks = callbacks or {}
+		if "onstatus" not in callbacks:
 			callbacks["onstatus"] = noop
-		if not "onerror" in callbacks:
+		if "onerror" not in callbacks:
 			callbacks["onerror"] = noop
-		if not "onfinish" in callbacks:
+		if "onfinish" not in callbacks:
 			callbacks["onfinish"] = noop
 
 		if self.bup_mounter is None:
@@ -248,8 +252,9 @@ class BupManager:
 			return
 		print(msg)
 
-	def mount_parents(self, callbacks={}):
-		if not "onerror" in callbacks:
+	def mount_parents(self, callbacks=None):
+		callbacks = callbacks or {}
+		if "onerror" not in callbacks:
 			callbacks["onerror"] = noop
 
 		if self.parents_need_sudo() and self.sudo_worker is not None:
@@ -280,8 +285,9 @@ class BupManager:
 		self.bup.set_dir(last_mount_path)
 		return True
 
-	def unmount_parents(self, callbacks={}):
-		if not "onerror" in callbacks:
+	def unmount_parents(self, callbacks=None):
+		callbacks = callbacks or {}
+		if "onerror" not in callbacks:
 			callbacks["onerror"] = noop
 
 		if self.parents_need_sudo() and self.sudo_worker is not None:

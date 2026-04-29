@@ -1,7 +1,12 @@
 import sys
 import os
-from subprocess import PIPE, Popen, call
-from gi.repository import Gtk, GObject, Pango, Gdk, Gio, GLib
+from subprocess import call
+import gi
+
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
+
+from gi.repository import Gtk, GObject, Pango, Gdk, Gio, GLib, Adw
 from .manager import BupManager
 from .sudo import Worker as SudoWorker
 from .scheduler import schedulers
@@ -12,54 +17,52 @@ import traceback
 import gettext
 import getpass
 
-GObject.threads_init() # Important: enable multi-threading support in GLib
-
 # l10n
-if gettext.find('bups', os.path.dirname(__file__)+'/../locale'):
-	gettext.install('bups', os.path.dirname(__file__)+'/../locale')
-else: # Try global translation
+if gettext.find('bups', os.path.dirname(__file__) + '/../locale'):
+	gettext.install('bups', os.path.dirname(__file__) + '/../locale')
+else:
 	gettext.install('bups')
+
 
 class BackupWindow(Gtk.Window):
 	def __init__(self, manager, parent=None):
-		Gtk.Window.__init__(self, title=_("Backup"))
-		self.set_border_width(10)
-		self.set_icon_name("drive-harddisk")
-		self.set_position(Gtk.WindowPosition.CENTER)
+		super().__init__(title=_("Backup"))
+		self.set_default_size(500, 300)
 
 		if parent is not None:
 			self.set_transient_for(parent)
+			self.set_modal(True)
 
 		vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		self.add(vbox)
+		vbox.set_margin_top(10)
+		vbox.set_margin_bottom(10)
+		vbox.set_margin_start(10)
+		vbox.set_margin_end(10)
+		self.set_child(vbox)
 
-		self.label = Gtk.Label(_("Ready."), xalign=0)
+		self.label = Gtk.Label(label=_("Ready."), xalign=0)
 		self.label.set_justify(Gtk.Justification.LEFT)
-		vbox.pack_start(self.label, False, False, 0)
+		vbox.append(self.label)
 
 		self.progressbar = Gtk.ProgressBar()
-		vbox.pack_start(self.progressbar, False, False, 0)
+		vbox.append(self.progressbar)
 
 		self.textview = Gtk.TextView()
-		#self.textview.modify_bg(Gtk.StateType.NORMAL, Gdk.Color(0, 0, 0))
-		#self.textview.modify_text(Gtk.StateType.NORMAL, Gdk.Color(255, 255, 255))
-		fontdesc = Pango.FontDescription("monospace")
-		self.textview.modify_font(fontdesc)
 		self.textview.set_editable(False)
+		self.textview.set_monospace(True)
 		sw = Gtk.ScrolledWindow()
 		sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 		sw.set_min_content_height(200)
-		sw.add(self.textview)
-		exp = Gtk.Expander()
-		exp.set_label(_("Details"))
-		exp.add(sw)
-		vbox.pack_start(exp, True, True, 0)
+		sw.set_child(self.textview)
+		exp = Gtk.Expander(label=_("Details"))
+		exp.set_child(sw)
+		vbox.append(exp)
 
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		self.close_button = Gtk.Button(_("Close"))
+		vbox.append(hbox)
+		self.close_button = Gtk.Button(label=_("Close"))
 		self.close_button.connect("clicked", self.on_close_clicked)
-		hbox.pack_end(self.close_button, False, False, 0)
+		hbox.append(self.close_button)
 
 		self.manager = manager
 
@@ -69,16 +72,10 @@ class BackupWindow(Gtk.Window):
 		finished = False
 
 		def set_window_deletable(deletable):
-			self.set_deletable(deletable)
-			parent = self.get_transient_for()
-			if parent is not None:
-				parent.set_deletable(deletable)
-
 			if not deletable:
-				self.close_button.hide()
-				self.resize(1, 1) # Make window as small as possible
+				self.close_button.set_visible(False)
 			else:
-				self.close_button.show()
+				self.close_button.set_visible(True)
 
 		def onstatus(status, ctx):
 			GLib.idle_add(self.set_label, status)
@@ -87,16 +84,15 @@ class BackupWindow(Gtk.Window):
 			if finished:
 				return
 
-			#print("PROGRESS", progress)
 			if "percentage" in progress:
-				if type(progress["percentage"]) == int or type(progress["percentage"]) == float:
-					GLib.idle_add(self.progressbar.set_fraction, progress["percentage"]/100)
+				if isinstance(progress["percentage"], (int, float)):
+					GLib.idle_add(self.progressbar.set_fraction, progress["percentage"] / 100)
 				else:
 					GLib.idle_add(self.progressbar.pulse)
 
 			lbl = _("Backing up {name}: ").format(name=ctx["name"])
 
-			if not "status" in progress:
+			if "status" not in progress:
 				return
 
 			if progress["status"] == "indexing":
@@ -113,19 +109,19 @@ class BackupWindow(Gtk.Window):
 			if "files_done" in progress:
 				lbl += str(progress["files_done"])
 				if "files_total" in progress:
-					lbl += "/"+str(progress["files_total"])
-				lbl += " "+_("files")
+					lbl += "/" + str(progress["files_total"])
+				lbl += " " + _("files")
 			if "bytes_done" in progress:
-				lbl += ", "+str(int(progress["bytes_done"]/1024))+"/"+str(int(progress["bytes_total"]/1024))+" "+_("KiB")
+				lbl += ", " + str(int(progress["bytes_done"] / 1024)) + "/" + str(int(progress["bytes_total"] / 1024)) + " " + _("KiB")
 			if "remaining_time" in progress and progress["remaining_time"]:
-				lbl += ", "+_("{remaining_time} remaining").format(remaining_time=progress["remaining_time"])
+				lbl += ", " + _("{remaining_time} remaining").format(remaining_time=progress["remaining_time"])
 			if "speed" in progress and progress["speed"]:
-				lbl += ", "+str(progress["speed"])+" "+_("KiB/s")
+				lbl += ", " + str(progress["speed"]) + " " + _("KiB/s")
 			if progress["status"] == "indexing":
 				if "paths_per_sec" in progress:
-					lbl += str(int(progress["paths_per_sec"]))+" "+_("paths/s")
+					lbl += str(int(progress["paths_per_sec"])) + " " + _("paths/s")
 				if "total_paths" in progress:
-					lbl += ", "+str(progress["total_paths"])+" "+_("paths indexed")
+					lbl += ", " + str(progress["total_paths"]) + " " + _("paths indexed")
 
 			if lbl[-1] == "(":
 				lbl = lbl[:-2]
@@ -141,6 +137,7 @@ class BackupWindow(Gtk.Window):
 		def onfinish(data, ctx):
 			GLib.idle_add(set_window_deletable, True)
 			GLib.idle_add(self.progressbar.set_fraction, 1)
+			nonlocal finished
 			finished = True
 
 		def onabord(data, ctx):
@@ -157,13 +154,12 @@ class BackupWindow(Gtk.Window):
 
 		self.set_label(_("Backup started..."))
 
-		# Lock window
 		set_window_deletable(False)
 
 		def do_backup(manager, callbacks):
 			try:
 				return manager.backup(callbacks)
-			except Exception as e:
+			except Exception:
 				callbacks["onerror"](traceback.format_exc(), {})
 				callbacks["onabord"]({}, {})
 
@@ -176,107 +172,133 @@ class BackupWindow(Gtk.Window):
 		self.label.set_text(txt)
 
 		if logLabel:
-			self.append_log(txt+"\n")
+			self.append_log(txt + "\n")
 
 	def append_log(self, txt):
 		buf = self.textview.get_buffer()
 		buf.insert(buf.get_end_iter(), txt)
-		#buf.insert_at_cursor(txt)
-		print((txt.strip()))
+		print(txt.strip())
 
 	def on_close_clicked(self, btn):
 		self.destroy()
 
+
 class RestoreWindow(Gtk.Window):
 	def __init__(self, manager, parent):
-		Gtk.Window.__init__(self, title=_("Restore"))
-		self.set_border_width(10)
-		self.set_icon_name("view-refresh")
-		self.set_position(Gtk.WindowPosition.CENTER)
+		super().__init__(title=_("Restore"))
+		self.set_default_size(400, 300)
 		self.set_transient_for(parent)
+		self.set_modal(True)
 
 		cfg = parent.load_config()
 
 		vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		self.add(vbox)
+		vbox.set_margin_top(10)
+		vbox.set_margin_bottom(10)
+		vbox.set_margin_start(10)
+		vbox.set_margin_end(10)
+		self.set_child(vbox)
 
-		backups_store = Gtk.ListStore(str)
-		for d in cfg["dirs"]:
-			backups_store.append([d["name"]])
-
+		# Backup name dropdown
+		backup_names = [d["name"] for d in cfg["dirs"]]
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Backup name"), xalign=0)
-		self.backup_name_combo = Gtk.ComboBox.new_with_model_and_entry(backups_store)
-		self.backup_name_combo.set_entry_text_column(0)
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.backup_name_combo, False, True, 0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Backup name"), xalign=0, hexpand=True)
+		self.backup_name_entry = Gtk.Entry()
+		if backup_names:
+			self.backup_name_entry.set_text(backup_names[0])
+		hbox.append(label)
+		hbox.append(self.backup_name_entry)
 
+		# Backup date
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Backup date"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Backup date"), xalign=0, hexpand=True)
 		self.backup_date_entry = Gtk.Entry()
 		self.backup_date_entry.set_text("latest")
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.backup_date_entry, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.backup_date_entry)
 
+		# Backup path
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Backup path"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Backup path"), xalign=0, hexpand=True)
 		self.backup_path_entry = Gtk.Entry()
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.backup_path_entry, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.backup_path_entry)
 
+		# Destination
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Destination"), xalign=0)
-		self.dest_folder_btn = Gtk.FileChooserButton.new(_("Choose a destination folder"), Gtk.FileChooserAction.SELECT_FOLDER)
-		self.dest_folder_btn.set_filename("/")
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.dest_folder_btn, False, True, 0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Destination"), xalign=0, hexpand=True)
+		self.dest_entry = Gtk.Entry()
+		self.dest_entry.set_text("/")
+		self.dest_choose_btn = Gtk.Button(label=_("Choose..."))
+		self.dest_choose_btn.connect("clicked", self.on_choose_dest)
+		hbox.append(label)
+		hbox.append(self.dest_entry)
+		hbox.append(self.dest_choose_btn)
 
-		hbox = Gtk.HButtonBox()
-		vbox.add(hbox)
+		# Buttons
+		btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+		btn_box.set_halign(Gtk.Align.END)
+		vbox.append(btn_box)
 
-		button = Gtk.Button(_("Cancel"))
+		button = Gtk.Button(label=_("Cancel"))
 		button.connect("clicked", self.on_close_clicked)
-		hbox.pack_end(button, False, False, 0)
+		btn_box.append(button)
 
-		button = Gtk.Button(_("Restore"))
-		if hasattr(Gtk, "STYLE_CLASS_SUGGESTED_ACTION"): # Since GTK 3.10
-			button.get_style_context().add_class(Gtk.STYLE_CLASS_SUGGESTED_ACTION)
+		button = Gtk.Button(label=_("Restore"))
+		button.add_css_class("suggested-action")
 		button.connect("clicked", self.on_restore_clicked)
-		hbox.pack_end(button, False, False, 0)
+		btn_box.append(button)
 
 		self.manager = manager
+
+	def on_choose_dest(self, btn):
+		dialog = Gtk.FileDialog()
+		dialog.set_title(_("Choose a destination folder"))
+		dialog.select_folder(self, None, self._on_dest_chosen)
+
+	def _on_dest_chosen(self, dialog, result):
+		try:
+			folder = dialog.select_folder_finish(result)
+			if folder:
+				self.dest_entry.set_text(folder.get_path())
+		except GLib.Error:
+			pass
 
 	def restore(self):
 		manager = self.manager
 
-		backup_name = self.backup_name_combo.get_child().get_text()
+		backup_name = self.backup_name_entry.get_text()
 		backup_date = self.backup_date_entry.get_text()
 		backup_path = self.backup_path_entry.get_text()
 		if backup_name == "":
 			return
-		from_path = "/" + backup_name +  "/" + backup_date + "/" + backup_path
-		to_path = self.dest_folder_btn.get_filename()
-		if to_path is None:
+		from_path = "/" + backup_name + "/" + backup_date + "/" + backup_path
+		to_path = self.dest_entry.get_text()
+		if not to_path:
 			to_path = "/"
 
-		progress_win = Gtk.Dialog(title=_("Restoring..."))
-		progress_win.set_default_size(150, 50)
-		progress_win.set_border_width(10)
+		# Progress window
+		progress_win = Gtk.Window(title=_("Restoring..."))
+		progress_win.set_default_size(300, 100)
 		progress_win.set_transient_for(self)
 		progress_win.set_modal(True)
-		progress_win.set_position(Gtk.WindowPosition.CENTER)
 
-		box = progress_win.get_content_area()
+		box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+		box.set_margin_top(10)
+		box.set_margin_bottom(10)
+		box.set_margin_start(10)
+		box.set_margin_end(10)
+		progress_win.set_child(box)
 
-		label = Gtk.Label(_("Ready."), xalign=0)
+		label = Gtk.Label(label=_("Ready."), xalign=0)
 		label.set_justify(Gtk.Justification.LEFT)
-		box.pack_start(label, False, False, 0)
+		box.append(label)
 
-		progress_win.show_all()
+		progress_win.present()
 
 		def set_label(msg):
 			label.set_text(msg)
@@ -285,18 +307,10 @@ class RestoreWindow(Gtk.Window):
 			progress_win.destroy()
 
 		def add_close_btn():
-			hbox = Gtk.HButtonBox()
-			box.add(hbox)
-
-			button = Gtk.Button(_("Close"))
+			button = Gtk.Button(label=_("Close"))
 			button.connect("clicked", close_progress_win)
-			hbox.pack_end(button, False, False, 0)
-
-			progress_win.show_all()
-			self.resize(1, 1) # Make window as small as possible
-
-			# Close restore window too
-			progress_win.connect("destroy", self.on_close_clicked)
+			box.append(button)
+			progress_win.connect("destroy", lambda w: self.on_close_clicked(None))
 
 		has_error = False
 
@@ -306,10 +320,11 @@ class RestoreWindow(Gtk.Window):
 				GLib.idle_add(set_label, status)
 
 		def onprogress(progress):
-			GLib.idle_add(set_label, _("Restoring, "+str(progress["files_done"])+" files done..."))
+			GLib.idle_add(set_label, _("Restoring, ") + str(progress["files_done"]) + _(" files done..."))
 
 		def onerror(err):
-			print(err) # TODO
+			print(err)
+			nonlocal has_error
 			has_error = True
 
 		def onfinish():
@@ -334,7 +349,7 @@ class RestoreWindow(Gtk.Window):
 					"from": from_path,
 					"to": to_path
 				}, callbacks)
-			except Exception as e:
+			except Exception:
 				callbacks["onerror"](traceback.format_exc())
 				callbacks["onabord"]()
 
@@ -347,293 +362,251 @@ class RestoreWindow(Gtk.Window):
 	def on_close_clicked(self, btn):
 		self.destroy()
 
+
 class SettingsWindow(Gtk.Window):
 	def __init__(self, parent):
-		Gtk.Window.__init__(self, title=_("Settings"))
-		self.set_default_size(150, 100)
-		self.set_border_width(10)
+		super().__init__(title=_("Settings"))
+		self.set_default_size(500, 400)
 		self.set_transient_for(parent)
 		self.set_modal(True)
-		self.set_icon_name("drive-harddisk")
-		self.set_position(Gtk.WindowPosition.CENTER)
 
 		self.cfg = parent.load_config()
 
 		box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		self.add(box)
+		box.set_margin_top(10)
+		box.set_margin_bottom(10)
+		box.set_margin_start(10)
+		box.set_margin_end(10)
+		self.set_child(box)
 
-		stack, nb = None, None
-		if hasattr(Gtk, "Stack"): # Use Stack if available
-			stack = Gtk.Stack()
-			stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+		# Use Notebook for tabs (still available in GTK 4)
+		nb = Gtk.Notebook()
+		box.append(nb)
 
-			stack_switcher = Gtk.StackSwitcher()
-			stack_switcher.set_stack(stack)
-			stack_switcher.set_halign(Gtk.Align.CENTER)
-
-			box.pack_start(stack_switcher, False, False, 0)
-			box.pack_start(stack, True, True, 0)
-		else:
-			nb = Gtk.Notebook()
-			box.add(nb)
-
+		# ── Destination tab ──
 		vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		if stack is not None:
-			stack.add_titled(vbox, "destination", _("Destination"))
-		else:
-			nb.append_page(vbox, Gtk.Label(_("Destination")))
+		vbox.set_margin_top(10)
+		vbox.set_margin_bottom(10)
+		vbox.set_margin_start(10)
+		vbox.set_margin_end(10)
+		nb.append_page(vbox, Gtk.Label(label=_("Destination")))
 
 		# Filesystem type
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Filesystem type"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Filesystem type"), xalign=0, hexpand=True)
 
 		mount_types = ["", "cifs", "sshfs", "google_drive"]
 		mount_types_names = [_("Local"), _("SAMBA"), _("SSH"), _("Google Drive")]
-		mount_type_store = Gtk.ListStore(str, str)
-		i = 0
-		for t in mount_types:
-			mount_type_store.append([t, mount_types_names[i]])
-			i += 1
-		self.mount_type_combo = Gtk.ComboBox.new_with_model(mount_type_store)
-		renderer_text = Gtk.CellRendererText()
-		self.mount_type_combo.pack_start(renderer_text, True)
-		self.mount_type_combo.add_attribute(renderer_text, "text", 1)
-		self.mount_type_combo.set_active(mount_types.index(self.cfg["mount"]["type"]))
-		self.mount_type_combo.connect("changed", self.on_mount_type_changed)
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.mount_type_combo, False, True, 0)
+		string_list = Gtk.StringList.new(mount_types_names)
+		self.mount_type_dropdown = Gtk.DropDown(model=string_list)
+		self.mount_type_dropdown.set_selected(mount_types.index(self.cfg["mount"]["type"]))
+		self.mount_type_dropdown.connect("notify::selected", self.on_mount_type_changed)
+		self._mount_types = mount_types
+		hbox.append(label)
+		hbox.append(self.mount_type_dropdown)
 
 		self.mount_boxes = {}
 
-
-		# SAMBA
+		# SAMBA options
 		samba_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		vbox.add(samba_box)
-		# Samba hostname
+		vbox.append(samba_box)
+
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		samba_box.add(hbox)
-		label = Gtk.Label(_("Hostname"), xalign=0)
+		samba_box.append(hbox)
+		label = Gtk.Label(label=_("Hostname"), xalign=0, hexpand=True)
 		self.samba_host_entry = Gtk.Entry()
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.samba_host_entry, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.samba_host_entry)
 
-		# Samba share
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		samba_box.add(hbox)
-		label = Gtk.Label(_("Samba share"), xalign=0)
+		samba_box.append(hbox)
+		label = Gtk.Label(label=_("Samba share"), xalign=0, hexpand=True)
 		self.samba_share_entry = Gtk.Entry()
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.samba_share_entry, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.samba_share_entry)
 
-		# Login
-		# TODO: not implemented
-		self.samba_guest_check = Gtk.CheckButton(_("Anonymous login"))
+		self.samba_guest_check = Gtk.CheckButton(label=_("Anonymous login"))
 		self.samba_guest_check.set_sensitive(False)
 		self.samba_guest_check.set_active(True)
-		samba_box.add(self.samba_guest_check)
+		samba_box.append(self.samba_guest_check)
 
 		self.mount_boxes["cifs"] = samba_box
 
-
-		# SSH
+		# SSH options
 		sshfs_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		vbox.add(sshfs_box)
-		# Samba hostname
+		vbox.append(sshfs_box)
+
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		sshfs_box.add(hbox)
-		label = Gtk.Label(_("Host"), xalign=0)
+		sshfs_box.append(hbox)
+		label = Gtk.Label(label=_("Host"), xalign=0, hexpand=True)
 		self.sshfs_host_entry = Gtk.Entry()
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.sshfs_host_entry, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.sshfs_host_entry)
 
 		self.mount_boxes["sshfs"] = sshfs_box
 
-
 		# Path
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Backup path"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Backup path"), xalign=0, hexpand=True)
 		self.path_prefix_entry = Gtk.Entry()
-		self.path_prefix_entry.set_text(self.cfg["mount"]["path"])
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.path_prefix_entry, False, True, 0)
+		self.path_prefix_entry.set_text(self.cfg["mount"].get("path", ""))
+		hbox.append(label)
+		hbox.append(self.path_prefix_entry)
 
 		# Load mount settings
-		if self.cfg["mount"]["type"] == "cifs": # SAMBA
+		if self.cfg["mount"]["type"] == "cifs":
 			host = ""
 			share = ""
 			target = self.cfg["mount"]["target"]
 			if target.startswith("//"):
 				target = target[2:]
-			host, share = target.split("/", 1)
-
+			if "/" in target:
+				host, share = target.split("/", 1)
 			self.samba_host_entry.set_text(host)
 			self.samba_share_entry.set_text(share)
-		if self.cfg["mount"]["type"] == "sshfs": # SSH
+		if self.cfg["mount"]["type"] == "sshfs":
 			self.sshfs_host_entry.set_text(self.cfg["mount"]["target"])
 
-		# Encrypt filesystem?
+		# Encrypt
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		self.encrypt_check = Gtk.CheckButton(_("Encrypt filesystem"))
+		vbox.append(hbox)
+		self.encrypt_check = Gtk.CheckButton(label=_("Encrypt filesystem"))
 		self.encrypt_check.set_active(self.cfg["mount"].get("encrypt", False))
-		hbox.add(self.encrypt_check)
+		hbox.append(self.encrypt_check)
 
-
+		# ── Schedule tab ──
 		vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-		if stack is not None:
-			stack.add_titled(vbox, "schedule", _("Schedule"))
-		else:
-			nb.append_page(vbox, Gtk.Label(_("Schedule")))
+		vbox.set_margin_top(10)
+		vbox.set_margin_bottom(10)
+		vbox.set_margin_start(10)
+		vbox.set_margin_end(10)
+		nb.append_page(vbox, Gtk.Label(label=_("Schedule")))
 
-		# Schedulers
-		i = 0
+		# Discover current scheduler
 		job = None
-		active_scheduler = 0 # By default, activate the first one
+		active_scheduler_idx = 0
+		i = 0
 		for name in schedulers:
 			s = schedulers[name]
 			try:
 				job = s.get_job("bups")
-			except IOError as e:
+			except (IOError, OSError):
 				i += 1
 				continue
-			active_scheduler = i
+			active_scheduler_idx = i
 			break
 
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Schedule backups"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Schedule backups"), xalign=0, hexpand=True)
 		self.schedule_switch = Gtk.Switch()
 		self.schedule_switch.set_active(job is not None)
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.schedule_switch, False, True, 0)
+		hbox.append(label)
+		hbox.append(self.schedule_switch)
 
+		# Scheduler dropdown
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Scheduler"), xalign=0)
-		schedulers_store = Gtk.ListStore(str, str, bool)
-		available_schedulers_nbr = 0
-		for name in schedulers:
-			avail = schedulers[name].is_available()
-			if avail:
-				available_schedulers_nbr += 1
-			schedulers_store.append([name, name, avail])
-		self.scheduler_combo = Gtk.ComboBox.new_with_model(schedulers_store)
-		renderer_text = Gtk.CellRendererText()
-		self.scheduler_combo.pack_start(renderer_text, True)
-		self.scheduler_combo.add_attribute(renderer_text, "text", 1)
-		self.scheduler_combo.add_attribute(renderer_text, "sensitive", 2)
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.scheduler_combo, False, True, 0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Scheduler"), xalign=0, hexpand=True)
+		scheduler_names = list(schedulers.keys())
+		self._scheduler_names = scheduler_names
+		available_schedulers_nbr = sum(1 for n in scheduler_names if schedulers[n].is_available())
 
+		scheduler_string_list = Gtk.StringList.new(scheduler_names)
+		self.scheduler_dropdown = Gtk.DropDown(model=scheduler_string_list)
 		if available_schedulers_nbr > 0:
-			self.scheduler_combo.set_active(active_scheduler)
+			self.scheduler_dropdown.set_selected(active_scheduler_idx)
+		hbox.append(label)
+		hbox.append(self.scheduler_dropdown)
 
+		# Period
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		vbox.add(hbox)
-		label = Gtk.Label(_("Interval (days)"), xalign=0)
+		vbox.append(hbox)
+		label = Gtk.Label(label=_("Interval (days)"), xalign=0, hexpand=True)
 		period = 1
 		if job is not None and "period" in job:
 			period = int(job["period"])
-		adjustment = Gtk.Adjustment(period, 1, 100, 1, 7, 0)
+		adjustment = Gtk.Adjustment(value=period, lower=1, upper=100, step_increment=1, page_increment=7)
 		self.schedule_period_spin = Gtk.SpinButton()
 		self.schedule_period_spin.set_adjustment(adjustment)
-		hbox.pack_start(label, True, True, 0)
-		hbox.pack_start(self.schedule_period_spin, False, True, 0)
-
-		# if not anacron_available:
-		# 	self.schedule_switch.set_sensitive(False)
-		# 	self.schedule_period_spin.set_sensitive(False)
-		# 	label = Gtk.Label("Could not read anacron config.\nPlease check that anacron is installed and that you can read "+anacron.config_file+".")
-		# 	vbox.add(label)
+		hbox.append(label)
+		hbox.append(self.schedule_period_spin)
 
 		if available_schedulers_nbr == 0:
 			self.schedule_switch.set_sensitive(False)
 			self.schedule_period_spin.set_sensitive(False)
-			label = Gtk.Label(_("No scheduler available. Please install one of:")+" " + ", ".join(list(schedulers.keys()))+".")
-			vbox.add(label)
+			label = Gtk.Label(label=_("No scheduler available. Please install one of:") + " " + ", ".join(scheduler_names) + ".")
+			vbox.append(label)
 
 		# Buttons
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-		box.add(hbox)
-		button = Gtk.Button(_("About"))
+		box.append(hbox)
+		button = Gtk.Button(label=_("About"))
 		button.connect("clicked", parent.on_about_clicked)
-		hbox.pack_start(button, False, False, 0)
-		button = Gtk.Button(_("Close"))
+		hbox.append(button)
+		spacer = Gtk.Box(hexpand=True)
+		hbox.append(spacer)
+		button = Gtk.Button(label=_("Close"))
 		button.connect("clicked", self.on_close_clicked)
-		hbox.pack_end(button, False, False, 0)
+		hbox.append(button)
 
-	def show_all(self):
-		Gtk.Window.show_all(self)
-		self.on_mount_type_changed()
+		# Apply mount visibility
+		self._update_mount_visibility()
 
 	def on_close_clicked(self, btn):
-		#self.response(Gtk.ResponseType.OK)
-		#win.connect("delete-event", win.quit)
-		self.hide()
+		self.set_visible(False)
 
-	def on_mount_type_changed(self, combo=None):
+	def on_mount_type_changed(self, dropdown, pspec):
+		self._update_mount_visibility()
+
+	def _update_mount_visibility(self):
 		mount_type = self.get_mount_type()
 
 		for t in self.mount_boxes:
 			box = self.mount_boxes[t]
-			if t == mount_type:
-				box.show()
-			else:
-				box.hide()
-
-		self.resize(1, 1) # Make window as smaller as possible
-
-		if combo is not None: # Not init
-			if mount_type == "":
-				self.path_prefix_entry.set_text("~/.bup")
-			else:
-				self.path_prefix_entry.set_text("")
+			box.set_visible(t == mount_type)
 
 	def get_mount_type(self):
-		mount_type_iter = self.mount_type_combo.get_active_iter()
-		if mount_type_iter != None:
-			model = self.mount_type_combo.get_model()
-			return model[mount_type_iter][0]
-		else:
-			return ""
+		idx = self.mount_type_dropdown.get_selected()
+		if idx < len(self._mount_types):
+			return self._mount_types[idx]
+		return ""
 
 	def get_config(self):
 		self.cfg["mount"]["type"] = self.get_mount_type()
 		self.cfg["mount"]["path"] = self.path_prefix_entry.get_text()
 		self.cfg["mount"]["encrypt"] = self.encrypt_check.get_active()
 
-		if self.cfg["mount"]["type"] == "cifs": # SAMBA
-			self.cfg["mount"]["target"] = "//"+self.samba_host_entry.get_text()+"/"+self.samba_share_entry.get_text()
+		if self.cfg["mount"]["type"] == "cifs":
+			self.cfg["mount"]["target"] = "//" + self.samba_host_entry.get_text() + "/" + self.samba_share_entry.get_text()
 			opts = ""
 			if self.samba_guest_check.get_active():
 				opts = "guest"
 			self.cfg["mount"]["options"] = opts
-		if self.cfg["mount"]["type"] == "sshfs": # SAMBA
+		if self.cfg["mount"]["type"] == "sshfs":
 			self.cfg["mount"]["target"] = self.sshfs_host_entry.get_text()
-		if self.cfg["mount"]["type"] == "": # No fs mounting
+		if self.cfg["mount"]["type"] == "":
 			self.cfg["mount"]["target"] = ""
 			self.cfg["mount"]["options"] = ""
 
 		return self.cfg
 
 	def get_scheduler_name(self):
-		scheduler_iter = self.scheduler_combo.get_active_iter()
-		if scheduler_iter != None:
-			model = self.scheduler_combo.get_model()
-			return model[scheduler_iter][0]
-		else:
-			return ""
+		idx = self.scheduler_dropdown.get_selected()
+		if idx < len(self._scheduler_names):
+			return self._scheduler_names[idx]
+		return ""
 
 	def get_scheduler_config(self):
 		if not self.schedule_switch.get_active():
 			return None
 
 		dirname = os.path.realpath(os.path.dirname(__file__))
-		logfile = dirname+"/scheduler-log.log"
-		cmd = sys.executable+" "+dirname+"/scheduler_worker.py "+config.file_path()
-		cmd += " > "+logfile+" 2>&1"
+		logfile = dirname + "/scheduler-log.log"
+		cmd = sys.executable + " " + dirname + "/scheduler_worker.py " + config.file_path()
+		cmd += " > " + logfile + " 2>&1"
 
 		cfg = {
 			"period": self.schedule_period_spin.get_value_as_int(),
@@ -647,250 +620,195 @@ class SettingsWindow(Gtk.Window):
 
 class BupWindow(Gtk.ApplicationWindow):
 	def __init__(self, app):
-		Gtk.Window.__init__(self, title="Bups", application=app)
+		super().__init__(application=app, title="Bups")
 		self.set_default_size(800, 400)
-		self.set_icon_name("drive-harddisk")
-		self.set_position(Gtk.WindowPosition.CENTER)
 
 		vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-		self.add(vbox)
+		self.set_child(vbox)
 
-		if hasattr(Gtk, "HeaderBar"): # Use HeaderBar if available
-			hb = Gtk.HeaderBar(title="Bups")
-			hb.set_show_close_button(True)
-			self.set_titlebar(hb)
+		# Header bar
+		hb = Gtk.HeaderBar()
+		self.set_titlebar(hb)
 
-			# Add/remove
-			box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-			Gtk.StyleContext.add_class(box.get_style_context(), "linked")
+		# Add/remove/properties buttons
+		box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+		box.add_css_class("linked")
 
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="list-add-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Add a directory"))
-			button.connect("clicked", self.on_add_clicked)
-			box.add(button)
+		button = Gtk.Button(icon_name="list-add-symbolic")
+		button.set_tooltip_text(_("Add a directory"))
+		button.connect("clicked", self.on_add_clicked)
+		box.append(button)
 
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="list-remove-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Remove this directory"))
-			button.connect("clicked", self.on_remove_clicked)
-			box.add(button)
+		button = Gtk.Button(icon_name="list-remove-symbolic")
+		button.set_tooltip_text(_("Remove this directory"))
+		button.connect("clicked", self.on_remove_clicked)
+		box.append(button)
 
-			if hasattr(Gtk, "Revealer"):
-				button = Gtk.ToggleButton()
-			else:
-				button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="document-properties-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Properties"))
-			button.connect("clicked", self.on_properties_clicked)
-			box.add(button)
-			self.sidebar_btn = button
+		button = Gtk.ToggleButton(icon_name="document-properties-symbolic")
+		button.set_tooltip_text(_("Properties"))
+		button.connect("clicked", self.on_properties_clicked)
+		box.append(button)
+		self.sidebar_btn = button
 
-			hb.pack_start(box)
+		hb.pack_start(box)
 
-			# Backup/browse/restore
-			box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-			Gtk.StyleContext.add_class(box.get_style_context(), "linked")
+		# Backup/restore/browse buttons
+		box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+		box.add_css_class("linked")
 
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="drive-harddisk-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Backup now"))
-			button.connect("clicked", self.on_backup_clicked)
-			box.add(button)
+		button = Gtk.Button(icon_name="drive-harddisk-symbolic")
+		button.set_tooltip_text(_("Backup now"))
+		button.connect("clicked", self.on_backup_clicked)
+		box.append(button)
 
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="view-refresh-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Restore a backup"))
-			button.connect("clicked", self.on_restore_clicked)
-			box.add(button)
+		button = Gtk.Button(icon_name="view-refresh-symbolic")
+		button.set_tooltip_text(_("Restore a backup"))
+		button.connect("clicked", self.on_restore_clicked)
+		box.append(button)
 
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="document-open-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Browse backups"))
-			button.connect("clicked", self.on_mount_clicked)
-			box.add(button)
+		button = Gtk.Button(icon_name="document-open-symbolic")
+		button.set_tooltip_text(_("Browse backups"))
+		button.connect("clicked", self.on_mount_clicked)
+		box.append(button)
 
-			hb.pack_start(box)
+		hb.pack_start(box)
 
-			# Settings
-			button = Gtk.Button()
-			icon = Gio.ThemedIcon(name="emblem-system-symbolic")
-			image = Gtk.Image.new_from_gicon(icon, Gtk.IconSize.BUTTON)
-			button.add(image)
-			button.set_tooltip_text(_("Settings"))
-			button.connect("clicked", self.on_settings_clicked)
-			hb.pack_end(button)
-		else: # Fallback to Toolbar if HeaderBar is not available
-			tb = Gtk.Toolbar()
-			tb.set_style(Gtk.ToolbarStyle.ICONS)
-			vbox.pack_start(tb, False, False, 0)
+		# Settings button
+		button = Gtk.Button(icon_name="emblem-system-symbolic")
+		button.set_tooltip_text(_("Settings"))
+		button.connect("clicked", self.on_settings_clicked)
+		hb.pack_end(button)
 
-			button = Gtk.ToolButton(Gtk.STOCK_ADD)
-			button.set_tooltip_text(_("Add a directory"))
-			button.connect("clicked", self.on_add_clicked)
-			tb.add(button)
-
-			button = Gtk.ToolButton(Gtk.STOCK_REMOVE)
-			button.set_tooltip_text(_("Remove this directory"))
-			button.connect("clicked", self.on_remove_clicked)
-			tb.add(button)
-
-			sep = Gtk.SeparatorToolItem()
-			tb.add(sep)
-
-			button = Gtk.ToolButton(Gtk.STOCK_HARDDISK)
-			button.set_tooltip_text(_("Backup now"))
-			button.connect("clicked", self.on_backup_clicked)
-			tb.add(button)
-
-			button = Gtk.ToolButton(Gtk.STOCK_REFRESH)
-			button.set_tooltip_text(_("Restore a backup"))
-			button.connect("clicked", self.on_restore_clicked)
-			tb.add(button)
-
-			button = Gtk.ToolButton(Gtk.STOCK_OPEN)
-			button.set_tooltip_text(_("Browse backups"))
-			button.connect("clicked", self.on_mount_clicked)
-			tb.add(button)
-
-			sep = Gtk.SeparatorToolItem()
-			sep.set_draw(False)
-			sep.set_expand(True)
-			tb.add(sep)
-
-			button = Gtk.ToolButton(Gtk.STOCK_PROPERTIES)
-			button.set_tooltip_text(_("Settings"))
-			button.connect("clicked", self.on_settings_clicked)
-			tb.add(button)
-
-		self.liststore = Gtk.ListStore(str, str)
-
-		self.treeview = Gtk.TreeView(model=self.liststore)
-
-		renderer_text = Gtk.CellRendererText()
-		column = Gtk.TreeViewColumn(_("Directory"), renderer_text, text=0)
-		column.set_sort_column_id(0)
-		self.treeview.append_column(column)
-
-		renderer_text = Gtk.CellRendererText()
-		renderer_text.set_property("editable", True)
-		renderer_text.connect("edited", self.on_backup_name_edited)
-		column = Gtk.TreeViewColumn(_("Name"), renderer_text, text=1)
-		column.set_sort_column_id(1)
-		self.treeview.append_column(column)
-
+		# Main content: directory list using Gtk.ListView
 		hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-		vbox.pack_start(hbox, True, True, 0)
+		vbox.append(hbox)
+
+		# Build the list model and view
+		self.dir_store = Gio.ListStore.new(DirItem)
+		self.selection_model = Gtk.SingleSelection(model=self.dir_store)
+
+		factory = Gtk.SignalListItemFactory()
+		factory.connect("setup", self._on_list_setup)
+		factory.connect("bind", self._on_list_bind)
+
+		self.listview = Gtk.ListView(model=self.selection_model, factory=factory)
+		self.listview.set_vexpand(True)
+		self.listview.set_hexpand(True)
 
 		scrolled = Gtk.ScrolledWindow()
-		scrolled.add(self.treeview)
+		scrolled.set_child(self.listview)
+		scrolled.set_vexpand(True)
+		scrolled.set_hexpand(True)
+		hbox.append(scrolled)
 
-		hbox.pack_start(scrolled, True, True, 0)
+		# Sidebar revealer for properties
+		self.sidebar = Gtk.Revealer()
+		self.sidebar.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
 
-		self.sidebar = None
-		if hasattr(Gtk, "Revealer"): # Gtk.Revealer is available since GTK 3.10
-			self.sidebar = Gtk.Revealer()
-			self.sidebar.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
+		self._create_properties(self.sidebar)
 
-			self.create_properties(self.sidebar)
+		hbox.append(self.sidebar)
 
-			hbox.pack_start(self.sidebar, False, False, 0)
-
-			selection = self.treeview.get_selection()
-			selection.connect("changed", self.on_treeview_selection_changed)
+		self.selection_model.connect("notify::selected", self._on_selection_changed)
 
 		self.config = None
 		self.load_config()
 		for dirpath in self.config["dirs"]:
-			self.add_dir_ui(dirpath)
+			self._add_dir_ui(dirpath)
 
 		sudo_worker = SudoWorker()
 		self.manager = BupManager(self.load_config(), sudo_worker)
 
-	def create_properties(self, outer):
-		sidebar_ctn = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-		outer.add(sidebar_ctn)
+	def _on_list_setup(self, factory, list_item):
+		box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+		box.set_margin_top(4)
+		box.set_margin_bottom(4)
+		box.set_margin_start(8)
+		box.set_margin_end(8)
+		dir_label = Gtk.Label(xalign=0, hexpand=True)
+		name_label = Gtk.Label(xalign=0)
+		box.append(dir_label)
+		box.append(name_label)
+		list_item.set_child(box)
 
-		sidebar_ctn.pack_start(Gtk.VSeparator(), False, False, 0)
+	def _on_list_bind(self, factory, list_item):
+		item = list_item.get_item()
+		box = list_item.get_child()
+		dir_label = box.get_first_child()
+		name_label = dir_label.get_next_sibling()
+		dir_label.set_text(item.path)
+		name_label.set_text(item.name)
+
+	def _create_properties(self, outer):
+		sidebar_ctn = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+		outer.set_child(sidebar_ctn)
+
+		sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+		sidebar_ctn.append(sep)
 
 		sidebar_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-		sidebar_vbox.set_border_width(10)
-		sidebar_ctn.pack_start(sidebar_vbox, True, True, 0)
+		sidebar_vbox.set_margin_top(10)
+		sidebar_vbox.set_margin_bottom(10)
+		sidebar_vbox.set_margin_start(10)
+		sidebar_vbox.set_margin_end(10)
+		sidebar_ctn.append(sidebar_vbox)
 
 		sidebar_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-		sidebar_vbox.add(sidebar_hbox)
-		label = Gtk.Label(_("Backup name"), xalign=0)
+		sidebar_vbox.append(sidebar_hbox)
+		label = Gtk.Label(label=_("Backup name"), xalign=0, hexpand=True)
 		self.sidebar_name_entry = Gtk.Entry()
-		sidebar_hbox.pack_start(label, True, True, 0)
-		sidebar_hbox.pack_start(self.sidebar_name_entry, False, True, 0)
+		sidebar_hbox.append(label)
+		sidebar_hbox.append(self.sidebar_name_entry)
 
 		sidebar_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-		sidebar_vbox.add(sidebar_hbox)
-		label = Gtk.Label(_("Exclude paths"), xalign=0)
+		sidebar_vbox.append(sidebar_hbox)
+		label = Gtk.Label(label=_("Exclude paths"), xalign=0, hexpand=True)
 		self.sidebar_exclude_entry = Gtk.Entry()
-		sidebar_hbox.pack_start(label, True, True, 0)
-		sidebar_hbox.pack_start(self.sidebar_exclude_entry, False, True, 0)
+		sidebar_hbox.append(label)
+		sidebar_hbox.append(self.sidebar_exclude_entry)
 
 		sidebar_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-		sidebar_vbox.add(sidebar_hbox)
-		label = Gtk.Label(_("Exclude patterns"), xalign=0)
+		sidebar_vbox.append(sidebar_hbox)
+		label = Gtk.Label(label=_("Exclude patterns"), xalign=0, hexpand=True)
 		self.sidebar_excluderx_entry = Gtk.Entry()
-		sidebar_hbox.pack_start(label, True, True, 0)
-		sidebar_hbox.pack_start(self.sidebar_excluderx_entry, False, True, 0)
+		sidebar_hbox.append(label)
+		sidebar_hbox.append(self.sidebar_excluderx_entry)
 
 		label = Gtk.Label()
-		label.set_markup("<small>"+_("Enter a comma-separated list of paths and patterns to exclude.")+
-			"\n<a href=\"https://github.com/bup/bup/blob/master/Documentation/bup-index.md\">"+_("Read the docs")+"</a></small>")
-		sidebar_vbox.add(label)
+		label.set_markup(
+			"<small>" + _("Enter a comma-separated list of paths and patterns to exclude.") +
+			'\n<a href="https://github.com/bup/bup/blob/master/Documentation/bup-index.md">' +
+			_("Read the docs") + "</a></small>"
+		)
+		sidebar_vbox.append(label)
 
-		self.sidebar_onefilesystem_check = Gtk.CheckButton(_("Don't cross filesystem boundaries"))
-		sidebar_vbox.add(self.sidebar_onefilesystem_check)
+		self.sidebar_onefilesystem_check = Gtk.CheckButton(label=_("Don't cross filesystem boundaries"))
+		sidebar_vbox.append(self.sidebar_onefilesystem_check)
 
 		sidebar_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-		sidebar_vbox.pack_end(sidebar_hbox, False, False, 0)
-		button = Gtk.Button(_("Save"))
-		if hasattr(Gtk, "STYLE_CLASS_SUGGESTED_ACTION"): # Since GTK 3.10
-			button.get_style_context().add_class(Gtk.STYLE_CLASS_SUGGESTED_ACTION)
-		button.connect("clicked", self.on_sidebar_save)
-		sidebar_hbox.pack_end(button, False, False, 0)
-		button = Gtk.Button(_("Cancel"))
+		sidebar_hbox.set_halign(Gtk.Align.END)
+		sidebar_vbox.append(sidebar_hbox)
+		button = Gtk.Button(label=_("Cancel"))
 		button.connect("clicked", self.on_sidebar_cancel)
-		sidebar_hbox.pack_end(button, False, False, 0)
+		sidebar_hbox.append(button)
+		button = Gtk.Button(label=_("Save"))
+		button.add_css_class("suggested-action")
+		button.connect("clicked", self.on_sidebar_save)
+		sidebar_hbox.append(button)
 
 	def get_selected_row_index(self):
-		selection = self.treeview.get_selection()
-		model, treeiter = selection.get_selected()
-		if treeiter is None:
+		idx = self.selection_model.get_selected()
+		if idx == Gtk.INVALID_LIST_POSITION:
 			return None
-		path = model[treeiter].path
-		index = path.get_indices()[0]
-
-		return index
+		return idx
 
 	def show_sidebar(self):
-		if type(self.sidebar) == Gtk.Revealer:
-			self.sidebar.set_reveal_child(True)
-			self.sidebar_btn.set_active(True)
+		self.sidebar.set_reveal_child(True)
+		self.sidebar_btn.set_active(True)
 
 	def hide_sidebar(self):
-		if type(self.sidebar) == Gtk.Revealer:
-			self.sidebar.set_reveal_child(False)
-			self.sidebar_btn.set_active(False)
-		if type(self.sidebar) == Gtk.Window:
-			self.sidebar.close()
-			self.sidebar = None
+		self.sidebar.set_reveal_child(False)
+		self.sidebar_btn.set_active(False)
 
 	def update_sidebar(self):
 		index = self.get_selected_row_index()
@@ -898,118 +816,95 @@ class BupWindow(Gtk.ApplicationWindow):
 			return
 		cfg = self.config["dirs"][index]
 
-		self.sidebar_name_entry.set_text(cfg["name"])
+		self.sidebar_name_entry.set_text(cfg.get("name", ""))
 
-		exclude = ""
-		if "exclude" in cfg:
-			exclude = ", ".join(cfg["exclude"])
+		exclude = ", ".join(cfg.get("exclude", []))
 		self.sidebar_exclude_entry.set_text(exclude)
 
-		excluderx = ""
-		if "excluderx" in cfg:
-			excluderx = ", ".join(cfg["excluderx"])
+		excluderx = ", ".join(cfg.get("excluderx", []))
 		self.sidebar_excluderx_entry.set_text(excluderx)
 
 		onefilesystem = cfg.get("onefilesystem", False)
 		self.sidebar_onefilesystem_check.set_active(onefilesystem)
 
-	def on_treeview_selection_changed(self, selection):
+	def _on_selection_changed(self, model, pspec):
 		if self.sidebar.get_reveal_child():
 			self.update_sidebar()
 
 	def on_properties_clicked(self, btn):
 		index = self.get_selected_row_index()
-		is_row_selected = (index is not None)
+		is_row_selected = index is not None
 
-		if hasattr(Gtk, "Revealer") and type(self.sidebar) == Gtk.Revealer:
-			if not self.sidebar_btn.get_active() or not is_row_selected:
-				self.hide_sidebar()
-				return
+		if not self.sidebar_btn.get_active() or not is_row_selected:
+			self.hide_sidebar()
+			return
 
-			self.update_sidebar()
-			self.show_sidebar()
-		else:
-			if not is_row_selected:
-				return
-
-			self.sidebar = Gtk.Window(title=_("Properties"))
-			self.sidebar.set_position(Gtk.WindowPosition.CENTER)
-			self.sidebar.set_transient_for(self)
-			self.sidebar.set_modal(True)
-			self.sidebar.set_resizable(False)
-
-			self.create_properties(self.sidebar)
-			self.update_sidebar()
-
-			self.sidebar.show_all()
+		self.update_sidebar()
+		self.show_sidebar()
 
 	def on_sidebar_cancel(self, btn):
 		self.hide_sidebar()
 
 	def on_sidebar_save(self, btn):
 		index = self.get_selected_row_index()
+		if index is None:
+			return
 
 		cfg = self.config["dirs"][index]
 
 		cfg["name"] = self.sidebar_name_entry.get_text()
 
 		exclude = self.sidebar_exclude_entry.get_text()
-		cfg["exclude"] = [x.strip() for x in exclude.split(',')]
-		if "" in cfg["exclude"]: cfg["exclude"].remove("")
+		cfg["exclude"] = [x.strip() for x in exclude.split(',') if x.strip()]
 
 		excluderx = self.sidebar_excluderx_entry.get_text()
-		cfg["excluderx"] = [x.strip() for x in excluderx.split(',')]
-		if "" in cfg["excluderx"]: cfg["excluderx"].remove("")
+		cfg["excluderx"] = [x.strip() for x in excluderx.split(',') if x.strip()]
 
 		cfg["onefilesystem"] = self.sidebar_onefilesystem_check.get_active()
 
 		self.config["dirs"][index] = cfg
 		self.save_config()
 
+		# Update the list item
+		item = self.dir_store.get_item(index)
+		if item:
+			item.name = cfg["name"]
+
 		self.hide_sidebar()
 
 	def on_add_clicked(self, btn):
-		dialog = Gtk.FileChooserDialog(_("Please choose a directory"), self,
-			Gtk.FileChooserAction.SELECT_FOLDER,
-			(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-			Gtk.STOCK_OPEN, Gtk.ResponseType.OK))
+		dialog = Gtk.FileDialog()
+		dialog.set_title(_("Please choose a directory"))
+		dialog.select_folder(self, None, self._on_folder_chosen)
 
-		response = dialog.run()
-		if response == Gtk.ResponseType.OK:
-			dirpath = dialog.get_filename()
-			print(("Dir selected: " + dirpath))
-
-			self.add_dir(dirpath)
-		elif response == Gtk.ResponseType.CANCEL:
-			print("Cancel clicked")
-
-		dialog.destroy()
+	def _on_folder_chosen(self, dialog, result):
+		try:
+			folder = dialog.select_folder_finish(result)
+			if folder:
+				dirpath = folder.get_path()
+				print("Dir selected: " + dirpath)
+				self.add_dir(dirpath)
+		except GLib.Error:
+			pass
 
 	def on_remove_clicked(self, btn):
-		selection = self.treeview.get_selection()
-		model, treeiter = selection.get_selected()
-		if treeiter != None:
-			dirpath = model[treeiter][0]
-			print(("Removing dir "+dirpath))
+		index = self.get_selected_row_index()
+		if index is not None:
+			dirpath = self.config["dirs"][index].get("path", "")
+			print("Removing dir " + dirpath)
 
-			model.remove(treeiter)
-			i = 0
-			for d in self.config["dirs"]:
-				dir_data = self.normalize_dir(d)
-				if dir_data["path"] == dirpath:
-					del self.config["dirs"][i]
-				i += 1
+			self.dir_store.remove(index)
+			del self.config["dirs"][index]
 			self.save_config()
-
 			self.on_sidebar_cancel(None)
 
 	def get_default_backup_name(self, dirpath):
 		login = getpass.getuser()
 		dirname = os.path.basename(dirpath).lower()
-		return login+"-"+dirname
+		return login + "-" + dirname
 
 	def normalize_dir(self, dir_data):
-		if type(dir_data) == str or type(dir_data) == str:
+		if isinstance(dir_data, str):
 			dir_data = {
 				"path": dir_data,
 				"name": self.get_default_backup_name(dir_data)
@@ -1022,54 +917,61 @@ class BupWindow(Gtk.ApplicationWindow):
 			"name": self.get_default_backup_name(dirpath)
 		})
 		self.save_config()
-		self.add_dir_ui(dirpath)
+		self._add_dir_ui(dirpath)
 
-	def add_dir_ui(self, dir_data):
+	def _add_dir_ui(self, dir_data):
 		dir_data = self.normalize_dir(dir_data)
-		self.liststore.append([dir_data["path"], dir_data["name"]])
-
-	def on_backup_name_edited(self, widget, path, text):
-		self.config["dirs"][int(path)]["name"] = text
-		self.save_config()
-		self.liststore[path][1] = text
+		item = DirItem(path=dir_data["path"], name=dir_data["name"])
+		self.dir_store.append(item)
 
 	def on_backup_clicked(self, btn):
 		win = BackupWindow(self.manager, parent=self)
-		win.show_all()
-
+		win.present()
 		win.backup()
 
 	def on_restore_clicked(self, btn):
 		win = RestoreWindow(self.manager, parent=self)
-		win.show_all()
+		win.present()
 
 	def on_mount_clicked(self, btn):
-		dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO, 0, _("Mounting filesystem..."))
+		info_label = Gtk.Label(label=_("Mounting filesystem..."))
+		mount_win = Gtk.Window(title=_("Mounting..."))
+		mount_win.set_default_size(300, 80)
+		mount_win.set_transient_for(self)
+		mount_win.set_modal(True)
+		box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+		box.set_margin_top(10)
+		box.set_margin_bottom(10)
+		box.set_margin_start(10)
+		box.set_margin_end(10)
+		box.append(info_label)
+		mount_win.set_child(box)
+		mount_win.present()
 
 		def open_mounted(data):
-			print(("Open dir:", data["path"]))
-			call("xdg-open "+data["path"], shell=True)
+			print("Open dir:", data["path"])
+			call(["xdg-open", data["path"]])
 
 		def show_error(e):
-			print(("ERR: could not mount bup filesystem: "+str(e)))
-			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
-				Gtk.ButtonsType.OK, _("Could not mount filesystem"))
-			dialog.format_secondary_text(str(e))
-			dialog.run()
-			dialog.destroy()
+			print("ERR: could not mount bup filesystem: " + str(e))
+			dialog = Gtk.AlertDialog()
+			dialog.set_message(_("Could not mount filesystem"))
+			dialog.set_detail(str(e))
+			dialog.show(self)
 
 		def onstatus(status):
-			GLib.idle_add(dialog.format_secondary_text, status)
+			GLib.idle_add(info_label.set_text, status)
 			print(status)
+
 		def onready(data):
-			GLib.idle_add(dialog.destroy)
+			GLib.idle_add(mount_win.destroy)
 			GLib.idle_add(open_mounted, data)
+
 		def onerror(err):
 			GLib.idle_add(show_error, err)
-		def onabord():
-			GLib.idle_add(dialog.destroy)
 
-		dialog.show_all()
+		def onabord():
+			GLib.idle_add(mount_win.destroy)
 
 		callbacks = {
 			"onready": onready,
@@ -1081,7 +983,7 @@ class BupWindow(Gtk.ApplicationWindow):
 		def do_mount(manager, callbacks):
 			try:
 				manager.mount(callbacks)
-			except Exception as e:
+			except Exception:
 				callbacks["onabord"]()
 				callbacks["onerror"](traceback.format_exc())
 
@@ -1091,8 +993,7 @@ class BupWindow(Gtk.ApplicationWindow):
 	def on_settings_clicked(self, btn):
 		win = SettingsWindow(self)
 		win.connect("hide", self.on_settings_closed)
-
-		win.show_all()
+		win.present()
 
 	def on_settings_closed(self, win):
 		self.config = win.get_config()
@@ -1102,38 +1003,41 @@ class BupWindow(Gtk.ApplicationWindow):
 		new_cfg = win.get_scheduler_config()
 		win.destroy()
 
+		current_scheduler_name = ""
+		current_cfg = None
 		for name in schedulers:
 			try:
 				current_scheduler_name = name
 				current_cfg = schedulers[name].get_job("bups")
 				break
-			except IOError as e:
+			except (IOError, OSError):
 				current_cfg = None
 
-		current_scheduler = schedulers[current_scheduler_name]
-		new_scheduler = schedulers[new_scheduler_name]
+		current_scheduler = schedulers.get(current_scheduler_name)
+		new_scheduler = schedulers.get(new_scheduler_name)
 
 		def remove_job():
-			print(("Removing scheduler job "+current_cfg["id"]))
+			print("Removing scheduler job " + current_cfg["id"])
 			current_scheduler.remove_job(current_cfg["id"])
+
 		def update_job():
-			print(("Updating scheduler job "+new_cfg["id"]))
+			print("Updating scheduler job " + new_cfg["id"])
 			new_scheduler.update_job(new_cfg)
+
 		def remove_update_job():
 			if current_cfg is not None:
 				remove_job()
 			update_job()
 
 		def show_error(e):
-			print(("ERR: could not update scheduler config: "+str(e)))
-			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
-				Gtk.ButtonsType.OK, _("Could not update scheduler config"))
-			dialog.format_secondary_text(str(e))
-			dialog.run()
-			dialog.destroy()
+			print("ERR: could not update scheduler config: " + str(e))
+			dialog = Gtk.AlertDialog()
+			dialog.set_message(_("Could not update scheduler config"))
+			dialog.set_detail(str(e))
+			dialog.show(self)
 
 		task = None
-		if new_cfg is None and current_cfg is not None: # Remove config
+		if new_cfg is None and current_cfg is not None:
 			task = remove_job
 		elif new_cfg is not None:
 			cfg_changed = True
@@ -1142,10 +1046,24 @@ class BupWindow(Gtk.ApplicationWindow):
 			else:
 				if current_cfg is not None:
 					cfg_changed = int(current_cfg["period"]) != int(new_cfg["period"])
-				if cfg_changed: # Add/update config
+				if cfg_changed:
 					task = update_job
 
-		if task is not None: # Run task with a loading dialog
+		if task is not None:
+			info_label = Gtk.Label(label=_("Updating configuration..."))
+			task_win = Gtk.Window(title=_("Updating..."))
+			task_win.set_default_size(300, 80)
+			task_win.set_transient_for(self)
+			task_win.set_modal(True)
+			box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+			box.set_margin_top(10)
+			box.set_margin_bottom(10)
+			box.set_margin_start(10)
+			box.set_margin_end(10)
+			box.append(info_label)
+			task_win.set_child(box)
+			task_win.present()
+
 			def run_task(task, onexit):
 				try:
 					task()
@@ -1153,29 +1071,24 @@ class BupWindow(Gtk.ApplicationWindow):
 					GLib.idle_add(show_error, e)
 				onexit()
 
-			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO, 0, _("Updating configuration..."))
 			def onexit():
-				GLib.idle_add(dialog.destroy)
+				GLib.idle_add(task_win.destroy)
 
-			dialog.show_all()
-
-			t = threading.Thread(target=run_task, args=(task,onexit))
+			t = threading.Thread(target=run_task, args=(task, onexit))
 			t.start()
 
 	def on_about_clicked(self, btn):
 		dialog = Gtk.AboutDialog()
 		dialog.set_transient_for(self)
-		dialog.set_title('Bups')
-		dialog.set_name('Bups')
+		dialog.set_modal(True)
 		dialog.set_program_name('Bups')
 		dialog.set_version(__version__)
 		dialog.set_authors(['Emersion'])
 		dialog.set_comments(_('Simple GUI for Bup, a very efficient backup system.'))
 		dialog.set_website('https://github.com/emersion/bups')
 		dialog.set_logo_icon_name('drive-harddisk')
-		dialog.set_license(_('Distributed under the MIT license.')+'\nhttp://opensource.org/licenses/MIT')
-		dialog.run()
-		dialog.destroy()
+		dialog.set_license(_('Distributed under the MIT license.') + '\nhttp://opensource.org/licenses/MIT')
+		dialog.present()
 
 	def load_config(self):
 		if self.config is None:
@@ -1192,25 +1105,34 @@ class BupWindow(Gtk.ApplicationWindow):
 		try:
 			config.write(self.config)
 		except IOError as e:
-			print(("ERR: could not update config: "+str(e)))
-			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.ERROR,
-				Gtk.ButtonsType.OK, _("Could not update config"))
-			dialog.format_secondary_text(str(e))
-			dialog.run()
-			dialog.destroy()
+			print("ERR: could not update config: " + str(e))
+			dialog = Gtk.AlertDialog()
+			dialog.set_message(_("Could not update config"))
+			dialog.set_detail(str(e))
+			dialog.show(self)
 
 	def quit(self, *args):
 		if self.manager.mounted:
-			dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO, 0, _("Unmounting filesystem..."))
+			info_label = Gtk.Label(label=_("Unmounting filesystem..."))
+			unmount_win = Gtk.Window(title=_("Unmounting..."))
+			unmount_win.set_default_size(300, 80)
+			unmount_win.set_transient_for(self)
+			unmount_win.set_modal(True)
+			box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+			box.set_margin_top(10)
+			box.set_margin_bottom(10)
+			box.set_margin_start(10)
+			box.set_margin_end(10)
+			box.append(info_label)
+			unmount_win.set_child(box)
+			unmount_win.present()
 
 			def onstatus(status):
-				GLib.idle_add(dialog.format_secondary_text, status)
+				GLib.idle_add(info_label.set_text, status)
 				print(status)
-			def onfinish(data):
-				GLib.idle_add(dialog.destroy)
-				#GLib.idle_add(Gtk.main_quit)
 
-			dialog.show_all()
+			def onfinish(data):
+				GLib.idle_add(unmount_win.destroy)
 
 			callbacks = {
 				"onfinish": onfinish,
@@ -1219,17 +1141,29 @@ class BupWindow(Gtk.ApplicationWindow):
 
 			t = threading.Thread(target=self.manager.unmount, args=(callbacks,))
 			t.start()
-		else:
-			pass #Gtk.main_quit()
+
+
+class DirItem(GObject.Object):
+	"""Data model for a backup directory entry."""
+	__gtype_name__ = 'DirItem'
+
+	path = GObject.Property(type=str, default="")
+	name = GObject.Property(type=str, default="")
+
+	def __init__(self, path="", name=""):
+		super().__init__()
+		self.path = path
+		self.name = name
+
 
 class BupApp(Gtk.Application):
 	def __init__(self):
-		Gtk.Application.__init__(self)
+		super().__init__(application_id="org.emersion.bups")
 
 	def do_activate(self):
 		win = BupWindow(self)
-		win.connect("delete-event", win.quit)
-		win.show_all()
+		win.connect("close-request", lambda w: w.quit())
+		win.present()
 
 	def do_startup(self):
 		Gtk.Application.do_startup(self)

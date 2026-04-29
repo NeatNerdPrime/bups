@@ -86,7 +86,7 @@ def update_job(job, remove=False):
 
 	o = "".join(lines)
 
-	f = tempfile.NamedTemporaryFile(delete=False)
+	f = tempfile.NamedTemporaryFile(mode='w', delete=False)
 	f.write(o)
 	f.close()
 

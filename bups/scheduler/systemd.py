@@ -1,5 +1,4 @@
 import os
-import io
 import configparser
 import subprocess
 import tempfile
@@ -21,7 +20,7 @@ def new_config():
 
 def parse_config(timer_cfg):
 	config = new_config()
-	config.readfp(io.BytesIO(timer_cfg))
+	config.read_string(timer_cfg)
 
 	return {
 		"period": parse_period(config.get("Timer", "OnCalendar")),
@@ -41,7 +40,7 @@ def get_job(job_id):
 	return cfg
 
 def write_config(config, config_file):
-	f = tempfile.NamedTemporaryFile(delete=False)
+	f = tempfile.NamedTemporaryFile(mode='w', delete=False)
 	config.write(f)
 	f.close()
 

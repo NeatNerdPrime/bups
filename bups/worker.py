@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import sys
-sys.path.append('/usr/lib/bup')
-
 import os
-from subprocess import PIPE, Popen, call
+
+# Add bup library path if it exists
+bup_lib = '/usr/lib/bup'
+if os.path.isdir(bup_lib) and bup_lib not in sys.path:
+	sys.path.append(bup_lib)
+
+from subprocess import PIPE, Popen
 import contextlib
-import json
 
 # Unix, Windows and old Macintosh end-of-line
 newlines = ['\n', '\r\n', '\r']
@@ -51,10 +54,12 @@ class BupWorker:
 	def get_dir(self):
 		return self.dir
 
-	def init(self, callbacks={}):
-		return self.run(['init'], callbacks)
+	def init(self, callbacks=None):
+		return self.run(['init'], callbacks or {})
 
-	def index(self, dirpath, opts={}, callbacks={}):
+	def index(self, dirpath, opts=None, callbacks=None):
+		opts = opts or {}
+		callbacks = callbacks or {}
 		args = ['index', '-u', dirpath]
 		if 'exclude_paths' in opts:
 			for excluded in opts['exclude_paths']:
@@ -67,17 +72,20 @@ class BupWorker:
 
 		return self.run(args, callbacks)
 
-	def save(self, dirpath, opts={}, callbacks={}):
+	def save(self, dirpath, opts=None, callbacks=None):
+		opts = opts or {}
+		callbacks = callbacks or {}
 		args = ['save', '-n', opts['name'], dirpath]
 		return self.run(args, callbacks)
 
-	def fuse(self, mount_path, callbacks={}):
-		self.run(['fuse', mount_path], callbacks)
+	def fuse(self, mount_path, callbacks=None):
+		self.run(['fuse', mount_path], callbacks or {})
 
-	def restore(self, from_path, to_path, callbacks={}):
-		self.run(['restore', '-C', to_path, from_path], callbacks)
+	def restore(self, from_path, to_path, callbacks=None):
+		self.run(['restore', '-C', to_path, from_path], callbacks or {})
 
-	def run(self, args, callbacks={}):
+	def run(self, args, callbacks=None):
+		callbacks = callbacks or {}
 		env = {
 			'BUP_FORCE_TTY': '2',
 			'BUP_MAIN_EXE': os.environ['BUP_MAIN_EXE'],

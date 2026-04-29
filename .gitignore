@@ -56,3 +56,7 @@ target/
 
 # stdeb
 deb_dist/
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/

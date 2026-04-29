@@ -1,11 +1,6 @@
 import os
 from .base import FuseBase
-
-#from ..sudo import sudo
-try:
-	from bups.sudo import sudo
-except ImportError as e:
-	from sudo import sudo
+from ..sudo import sudo
 
 class FuseRoot(FuseBase):
 	def __init__(self, cfg):

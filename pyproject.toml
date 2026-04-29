@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "bups"
+version = "0.9.0"
+description = "Simple GUI for Bup, a very efficient backup system."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "emersion" },
+]
+urls = { Homepage = "https://github.com/emersion/bups" }
+dependencies = [
+    "PyGObject>=3.42",
+    "pycairo>=1.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8>=7.0",
+    "pyflakes>=3.2",
+    "pycodestyle>=2.12",
+    "pytest>=8.0",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+bups = "bups:main"
+
+[project.gui-scripts]
+bups-gui = "bups:main"
+
+[tool.setuptools.packages.find]
+include = ["bups*"]
+
+[tool.setuptools.package-data]
+bups = ["config/*.json", "VERSION"]
+
+[tool.flake8]
+max-line-length = 120
+ignore = ["E101", "W191", "E501", "W503"]
+per-file-ignores = ["bups/gtk.py:E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

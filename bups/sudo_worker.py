@@ -9,8 +9,8 @@ manager = BupManager(config.read(sys.argv[1]))
 
 while True:
 	try:
-		cmd = eval(input())
-	except EOFError as e:
+		cmd = input().strip()
+	except EOFError:
 		cmd = 'quit'
 
 	res = {
@@ -19,7 +19,7 @@ while True:
 	}
 
 	def onerror(err, ctx):
-		res["output"] += err+"\n"
+		res["output"] += err + "\n"
 
 	callbacks = {
 		"onerror": onerror
@@ -33,5 +33,5 @@ while True:
 	if cmd == 'unmount':
 		res["success"] = manager.unmount_parents(callbacks)
 
-	sys.stdout.write(json.dumps(res)+"\n")
+	sys.stdout.write(json.dumps(res) + "\n")
 	sys.stdout.flush()

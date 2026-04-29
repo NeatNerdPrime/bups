@@ -1,5 +1,4 @@
 import configparser
-import io
 import os
 
 base_dir = os.getenv("XDG_CONFIG_DIR", os.path.join(os.path.expanduser("~"), ".config"))
@@ -22,7 +21,7 @@ def new_config():
 
 def parse_config(timer_cfg):
     config = new_config()
-    config.readfp(io.BytesIO(timer_cfg))
+    config.read_string(timer_cfg)
     period = config.get("Timer", "OnCalendar").split('/')[1]
     return { "period": period, "delay": "0" }
 
@@ -79,5 +78,5 @@ def remove_job(job_id):
 def call_systemctl(args):
     cmd = "systemctl --user %s" % " ".join(args)
     if os.system(cmd) != 0:
-        raise IOError("Failed to run command: %" % cmd)
+        raise IOError("Failed to run command: %s" % cmd)
 
