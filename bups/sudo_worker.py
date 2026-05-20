@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
+import os
 import sys
-from . import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
-from .manager import BupManager
+from bups import config
+from bups.manager import BupManager
 
 manager = BupManager(config.read(sys.argv[1]))
 
