@@ -1,0 +1,103 @@
+---
+stages:
+  - lint
+  - build
+  - verify
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+cache:
+  paths:
+    - .pip-cache/
+
+# Lint with ruff (replaces flake8 — faster, modern Python linter)
+lint:ruff:
+  stage: lint
+  image: python:3.11-slim
+  before_script:
+    - pip install --quiet ruff
+  script:
+    - ruff check bups/
+    - ruff format --check bups/
+  allow_failure: false
+
+# Type checking — advisory (mypy on a GTK4 project has gaps in stubs)
+typecheck:mypy:
+  stage: lint
+  image: python:3.11-slim
+  before_script:
+    - pip install --quiet mypy
+  script:
+    - mypy bups/ --ignore-missing-imports --no-error-summary || true
+  allow_failure: true
+
+# Build .deb on bookworm (Python 3.11)
+build:bookworm:
+  stage: build
+  image: debian:bookworm
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq debhelper dh-python python3-all python3-setuptools gettext fakeroot dpkg-dev
+  script:
+    - cd "$CI_PROJECT_DIR"
+    - rm -rf debian/bups debian/*.log debian/files
+    - dpkg-buildpackage -b -us -uc -rfakeroot
+    - mv ../bups_*.deb "$CI_PROJECT_DIR/bups_bookworm.deb"
+  artifacts:
+    paths:
+      - bups_bookworm.deb
+    expire_in: 1 week
+
+# Build .deb on trixie (Python 3.13)
+build:trixie:
+  stage: build
+  image: debian:trixie
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq debhelper dh-python python3-all python3-setuptools gettext fakeroot dpkg-dev
+  script:
+    - cd "$CI_PROJECT_DIR"
+    - rm -rf debian/bups debian/*.log debian/files
+    - dpkg-buildpackage -b -us -uc -rfakeroot
+    - mv ../bups_*.deb "$CI_PROJECT_DIR/bups_trixie.deb"
+  artifacts:
+    paths:
+      - bups_trixie.deb
+    expire_in: 1 week
+
+# Smoke test: install .deb on bookworm and verify imports + desktop file
+verify:bookworm:
+  stage: verify
+  image: debian:bookworm
+  needs: [build:bookworm]
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq gir1.2-adw-1 gir1.2-gtk-4.0 python3-gi python3-gi-cairo
+  script:
+    - dpkg -i bups_bookworm.deb || apt-get install -f -y -qq
+    - which bups
+    - python3 -c "from bups import version; print('version:', version.__version__)"
+    - python3 -c "from bups import manager, worker, config; print('modules OK')"
+    - test -f /usr/share/applications/bups.desktop && echo "desktop OK"
+    - test -f /usr/share/locale/de/LC_MESSAGES/bups.mo && echo "locale de OK"
+    - test -f /usr/share/locale/fr/LC_MESSAGES/bups.mo && echo "locale fr OK"
+    - echo "=== bookworm verification PASSED ==="
+
+# Smoke test: install .deb on trixie and verify imports + desktop file
+verify:trixie:
+  stage: verify
+  image: debian:trixie
+  needs: [build:trixie]
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq gir1.2-adw-1 gir1.2-gtk-4.0 python3-gi python3-gi-cairo
+  script:
+    - dpkg -i bups_trixie.deb || apt-get install -f -y -qq
+    - which bups
+    - python3 -c "from bups import version; print('version:', version.__version__)"
+    - python3 -c "from bups import manager, worker, config; print('modules OK')"
+    - test -f /usr/share/applications/bups.desktop && echo "desktop OK"
+    - test -f /usr/share/locale/de/LC_MESSAGES/bups.mo && echo "locale de OK"
+    - test -f /usr/share/locale/fr/LC_MESSAGES/bups.mo && echo "locale fr OK"
+    - echo "=== trixie verification PASSED ==="

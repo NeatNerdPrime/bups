@@ -60,3 +60,16 @@ deb_dist/
 # Tool caches
 .ruff_cache/
 .mypy_cache/
+
+# Debian packaging build artifacts
+.pybuild/
+debian/.debhelper/
+debian/bups/
+debian/files
+debian/*.log
+debian/*.substvars
+debian/*.debhelper
+debian/debhelper-build-stamp
+
+# AI session data (must never be committed)
+/.claude/

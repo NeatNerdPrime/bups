@@ -1,0 +1,10 @@
+bups (0.9.0-1) unstable; urgency=medium
+
+  * Migrate from Python 2/GTK3 to Python 3/GTK4 with libadwaita
+  * Modernize packaging: pyproject.toml with setuptools.build_meta
+  * Fix Python 3.12+ compatibility (remove distutils, use setuptools)
+  * Fix regex raw strings in manager.py for Python 3.13 compatibility
+  * Add __main__ guard in sudo_worker.py to prevent import-time error
+  * Update runtime deps: gir1.2-gtk-4.0, gir1.2-adw-1, python3-gi
+
+ -- Hugo Antonio Sepulveda Manriquez <hugo@neatnerds.be>  Fri, 27 Jun 2026 17:00:00 +0200
