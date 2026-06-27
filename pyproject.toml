@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=60.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "bups"
-version = "0.9.0"
+dynamic = ["version"]
 description = "Simple GUI for Bup, a very efficient backup system."
 readme = "README.md"
 license = "MIT"
@@ -32,6 +32,9 @@ bups = "bups:main"
 
 [project.gui-scripts]
 bups-gui = "bups:main"
+
+[tool.setuptools.dynamic]
+version = {file = "bups/VERSION"}
 
 [tool.setuptools.packages.find]
 include = ["bups*"]
