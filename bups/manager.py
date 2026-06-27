@@ -61,7 +61,7 @@ class BupManager:
 			}
 
 			def status2progress(line):
-				m = re.search("Indexing:\s*(\d+)((?:,\s*done)?)\s*\((\d+) paths/s\)", line)
+				m = re.search(r"Indexing:\s*(\d+)((?:,\s*done)?)\s*\((\d+) paths/s\)", line)
 				if m is not None:
 					percentage = None
 					if m.group(2) != "":
@@ -73,7 +73,7 @@ class BupManager:
 						'paths_per_sec': int(m.group(3))
 					}
 
-				m = re.search("Reading index:\s*(\d+)((?:,\s*done)?)", line)
+				m = re.search(r"Reading index:\s*(\d+)((?:,\s*done)?)", line)
 				if m is not None:
 					percentage = None
 					if m.group(2) != "":
@@ -84,7 +84,7 @@ class BupManager:
 						'files_done': int(m.group(1))
 					}
 
-				m = re.search("Saving:\s*([\d.]+)%\s*\((\d+)/(\d+)k, (\d+)/(\d+) files\)", line)
+				m = re.search(r"Saving:\s*([\d.]+)%\s*\((\d+)/(\d+)k, (\d+)/(\d+) files\)", line)
 				if m is not None:
 					return {
 						'status': 'saving',
